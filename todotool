@@ -1,0 +1,360 @@
+#!/usr/bin/env python
+
+import sys
+import collections
+# import argparse
+import yaml
+import gui
+
+# argparser = argparse.ArgumentParser(description='Simple todo manager')
+
+# # Keyword arguments
+# # argparser.add_argument('--add', action='store_true',
+# #                         help='Adds a new task to the task list.')
+# # argparser.add_argument('--delete', type=int, nargs='*',
+# #                         help='Removes the task(s) at the given position(s).')
+
+# # Positional arguments
+# subparser = argparser.add_subparsers(help='Sub-command help')
+# # Subarguments
+# # add
+# parser_add = subparser.add_parser('add',
+#                                   help='Adds a new taskt to the task list.',
+#                                   argument_default='')
+# parser_add.add_argument('add', type=str, nargs='?')
+# # del
+# parser_del = subparser.add_parser('del',
+#                                   help='Removes the task(s) at the given position(s).')
+# parser_del.add_argument('delete', type=int, nargs='*')
+
+# # Parse the command line arguments
+# args = argparser.parse_args()
+# print args
+
+# class Messages(object):
+#     """Helper class that holds all messages directly visible to
+#     the user
+#     """
+#     def __init__(self, **kwds):
+#         self.__dict__.update(kwds)
+
+# # Contains all the messages that are directly visible to the user
+# # This tuple is globally visible in the whole project.
+# messages = Messages(
+#     query_mesg="Enter new task\n> "
+#     )
+
+messages = {
+    'query_task_mesg': 'Enter new task:\n> ',
+    'query_priority_mesg': 'Enter new priority:\n> '
+    }
+
+
+class Task(object):
+    MIN_PRIORITY = 1
+    DEFAULT_LABEL = 'Default task'
+
+    def __init__(self, label='', priority=MIN_PRIORITY):
+        self.label = label
+        self.priority = priority
+        self.fields = collections.OrderedDict([
+                ('Task', self.label),
+                ('Priority', self.priority)])
+
+    def __str__(self):
+        return '<TASK: "' + self.label + '", "' + str(self.priority) + '">'
+
+    def set_priority(self, priority=MIN_PRIORITY):
+        self.priority = int(priority)
+
+    def set_label(self, label=DEFAULT_LABEL):
+        self.label = str(label)
+
+    def get_fields(self):
+        return self.fields
+
+
+class TaskList(object):
+    def __init__(self):
+        self.tasks = []
+        self.current_task_idx = 0
+
+    def __len__(self):
+        return len(self.tasks)
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        """Returns the next element. This method is needed since this
+        class implements __iter__.
+        """
+        if self.current_task_idx > len(self.tasks) - 1:
+            raise StopIteration
+        else:
+            self.current_task_idx += 1
+            return self.tasks[self.current_task_idx - 1]
+
+    def add(self, task):
+        self.tasks.append(task)
+
+    def remove(self, task):
+        self.tasks.remove(task)
+
+    def get_task(self, label):
+        """Returns the task for a given label.
+        Returns 'None' if no match is found.
+        """
+        t = None
+        for task in self.tasks:
+            if task.label == label:
+                t = task
+        return t
+
+    def get_as_list(self):
+        return self.tasks
+
+    def get_task_at(self, pos):
+        return self.tasks[pos]
+
+    def get_labels(self):
+        labels = []
+        for task in self.tasks:
+            labels.append(task.label)
+        return labels
+
+    def get_priority_count(self):
+        priority_count = {}
+        for idx, task in enumerate(tasks):
+            priority_count[idx + 1] = task.priority
+        return priority_count
+
+    def clear(self):
+        self.tasks = []
+
+    def contains(self, label):
+        c = False
+        if label in self.get_labels():
+            c = True
+        return c
+
+    def convert_and_import(self, nested_list):
+        """Converts a nested list to a list of Task objects and adds
+        it to the current TaskList.
+        """
+        for sublist in nested_list:
+            new_task = Task()
+            for idx, item in enumerate(sublist):
+                if idx == 0:
+                    new_task.set_label(item)
+                if idx == 1:
+                    new_task.set_priority(item)
+            self.add(new_task)
+
+    def convert_to_list(self):
+        converted = []
+        for task in self.tasks:
+            converted.append([task.label, task.priority])
+        return converted
+
+    def sort_numerically(self):
+        t = self.tasks
+        self.tasks = sorted(self.tasks, key=lambda t: t.priority)
+
+    def sort_alphabetically(self):
+        t = self.tasks
+        self.tasks = sorted(self.tasks, key=lambda t: t.label)
+
+
+class TodoTool(object):
+    def __init__(self, todo_file='.todo'):
+        self.todo_file = todo_file
+        self.string = ''
+        self.task_list = TaskList()
+        self.load()
+        self.current_task = []
+        self.priority_range = range(1, 8)
+
+    def set_todo_file(self, todo_file):
+        self.todo_file = todo_file
+
+    def load(self):
+        """Loads the todo file and makes the tasks available as Python
+        data structure
+        """
+        # Create todo file if it does not exist yet
+        if open(self.todo_file):
+            pass
+        else:
+            f = open(self.todo_file, 'w')
+            f.close()
+
+        with open(self.todo_file, 'r') as todo_file:
+            self.string = todo_file.read()
+            loaded = yaml.load(self.string)
+
+            if loaded is not None:
+                self.task_list.convert_and_import(loaded)
+            else:
+                self.task_list.clear()
+
+    def add_task(self, label, priority=0):
+        """Adds a task to the task list."""
+        if self.task_list.contains(label):
+            return False
+        else:
+            self.task_list.add(Task(label, priority))
+
+        self.dump()
+
+    def dump(self):
+        """Dumps the task list as YAML to the todo file."""
+        with open(self.todo_file, 'w') as todo_file:
+            print 'Dumping task list to todo file.'
+            todo_file.write(yaml.dump(self.task_list.convert_to_list()))
+
+    def query_task(self):
+        """Asks the user to add a task to the task list."""
+        user_input = raw_input(messages['query_task_mesg'])
+        self.add_task(user_input)
+        self.dump()
+
+    def flush_task_list(self):
+        """Deletes all tasks."""
+        self.task_list.clear()
+        self.dump()
+
+    def print_task_list(self):
+        """Prints a visual representation of the tasks in the task
+        list
+        """
+        for idx, task in enumerate(self.task_list.get_as_list()):
+            print "%-5s    %5s    %s" % (idx, task.priority, task.label)
+
+    # # XXX
+    # def swap_tasks(self, old, new):
+    #     """Swaps two tasks in the task list."""
+    #     self.task_list[old], self.task_list[new] = self.task_list[new], self.task_list[old]
+
+    def change_task(self, pos, new_text):
+        """Changes the textual description for the task at the specified
+        position
+        """
+        self.task_list.get_task_at(pos).label.set_label(new_text)
+
+    def remove_task(self, pos=0, task=''):
+        """Removes the task at the given position from the task list."""
+        print 'REMOVING: ', self.task_list.get_task_at(pos)
+        self.task_list.remove(self.task_list.get_task_at(pos))
+        self.dump()
+
+    def export_ascii(self, filename):
+        with open(filename, 'w') as f:
+            # for idx, task in enumerate(self.task_list):
+            for idx, task in enumerate(self.task_list.get_as_list()):
+                string = '%-5s    %5s    %s\n' % (idx + 1, task.priority, task.label)
+                f.write(string)
+
+    def set_priority(self, pos, priority):
+        """Sets the priority for the task at the specified position in
+        the task list.
+        """
+        if priority in self.priority_range:
+            # self.task_list[pos - 1][1] = priority
+            # Internally the task list is zero-based whereas it is not
+            # for the user. Hence pos has to be changed
+            self.task_list.get_task_at(pos).set_priority(priority)
+            self.dump()
+        else:
+            print 'Priority value ', priority, ' is not in valid range %s.' % priority_range
+
+    def query_priority(self, pos):
+        # Range checking done by self.set_priority(...)
+        new_priority = 0
+        if int(pos) in range(0, len(self.task_list) + 1):
+            new_priority = raw_input(messages['query_priority_mesg'])
+        self.set_priority(int(pos), int(new_priority))
+
+    def render(self):
+        # panel = gui.TodoListCtrlPanel()
+        gui.data = self.task_list
+        gui.GUI(self)
+
+    #===================================================================
+    # Debug helpers
+    #===================================================================
+
+    def _print_loaded(self):
+        """Pretty-prints the loaded YAML input."""
+        import pprint
+        pprint.PrettyPrinter().pprint(yaml.load(self.string)())
+
+    def _dump_loaded(self):
+        """Dumps the loaded YAML input as YAML."""
+        print yaml.dump(self.load())
+
+    def _print_task_list(self):
+        import pprint
+        pprint.PrettyPrinter().pprint(self.task_list)
+
+
+if __name__ == '__main__':
+    todo_tool = TodoTool()  # './res/test.yaml')
+
+    # # DEBUG: Do not remove the following code since it is needed for
+    # # manual debugging.
+    # todo_tool._print_loaded()
+    # todo_tool._dump_loaded()
+    # todo_tool._print_task_list()
+
+    # todo_tool.flush_task_list()
+    # todo_tool.query_task()
+    # todo_tool.print_task_list()
+
+    # if args.add:
+    #     if args.add is '':
+    #         print 'Querying...'
+    #         todo_tool.query_task()
+    #     else:
+    #         print 'Adding task...'
+    #         todo_tool.add_task(args.add)
+    # # elif args.delete == 3:
+    # #     print 'Deleting...'
+    # #     todo_tool.remove_task(args.delete)
+    # else:
+    #     print 'Adding(2)...'
+    #     todo_tool.query_task()
+
+
+    print 'SYS.ARGV: ', sys.argv
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'add':
+            if len(sys.argv) == 3:
+                todo_tool.add_task(sys.argv[2])
+            else:
+                todo_tool.query_task()
+        elif sys.argv[1] == 'del':
+            if len(sys.argv) >= 3:
+                if sys.argv[2] == 'all':
+                    todo_tool.flush_task_list()
+                else:
+                    for arg in sys.argv[2:]:
+                        print 'Removing task...'
+                        todo_tool.remove_task(int(arg))
+            else:
+                print 'Not enough arguments.'
+        elif sys.argv[1] == 'export':
+            if len(sys.argv) == 3:
+                if sys.argv[2] == 'ascii':
+                    todo_tool.export_ascii('TODO')
+        elif sys.argv[1] == 'priority':
+            if len(sys.argv) == 4:
+                todo_tool.set_priority(int(sys.argv[2]), int(sys.argv[3]))
+            else:
+                print 'Task position has to be specified.'
+        elif sys.argv[1] == 'gui':
+            todo_tool.render()
+        else:
+            todo_tool.query_task()
+    else:
+        todo_tool.print_task_list()
